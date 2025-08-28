@@ -79,19 +79,7 @@ var (
 	v2rayHandles = make(map[int32]*V2RayInstance)
 )
 
-// iOS memory management for V2Ray
-func initV2RayMemoryManagement() {
-	debug.SetGCPercent(10)
-	debug.SetMemoryLimit(30 * 1024 * 1024) // 30MB limit
 
-	// Force memory cleanup every second
-	go func() {
-		for {
-			time.Sleep(1 * time.Second)
-			debug.FreeOSMemory()
-		}
-	}()
-}
 
 func init() {
 	signals := make(chan os.Signal)
@@ -257,7 +245,6 @@ func wgVersion() *C.char {
 
 //export wgV2rayStart
 func wgV2rayStart(jsonConfig *C.char) int32 {
-	initV2RayMemoryManagement()
 	v2rayLocker.Lock()
 	defer v2rayLocker.Unlock()
 
@@ -306,7 +293,6 @@ func wgV2rayStart(jsonConfig *C.char) int32 {
 
 	v2rayHandles[handle] = instance
 	log.Printf("[V2Ray] Core started successfully with handle %d", handle)
-	debug.FreeOSMemory() // Free memory after start
 	return handle
 }
 
@@ -332,7 +318,6 @@ func wgV2rayStop(handle int32) int32 {
 	delete(v2rayHandles, handle)
 
 	log.Printf("[V2Ray] Core stopped successfully")
-	debug.FreeOSMemory() // Free memory after stop
 	return 0
 }
 
