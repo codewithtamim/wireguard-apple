@@ -15,12 +15,14 @@ import "C"
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"os/signal"
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -28,6 +30,13 @@ import (
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun"
+
+	core "github.com/v2fly/v2ray-core/v5"
+	corestats "github.com/v2fly/v2ray-core/v5/features/stats"
+	coreserial "github.com/v2fly/v2ray-core/v5/infra/conf/serial"
+
+
+	_ "github.com/v2fly/v2ray-core/v5/main/distro/all"
 )
 
 var loggerFunc unsafe.Pointer
@@ -57,6 +66,32 @@ type tunnelHandle struct {
 }
 
 var tunnelHandles = make(map[int32]tunnelHandle)
+
+
+type V2RayInstance struct {
+	coreInstance *core.Instance
+	statsManager corestats.Manager
+	IsRunning    bool
+}
+
+var (
+	v2rayLocker  sync.Mutex
+	v2rayHandles = make(map[int32]*V2RayInstance)
+)
+
+// iOS memory management for V2Ray
+func initV2RayMemoryManagement() {
+	debug.SetGCPercent(10)
+	debug.SetMemoryLimit(30 * 1024 * 1024) // 30MB limit
+
+	// Force memory cleanup every second
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			debug.FreeOSMemory()
+		}
+	}()
+}
 
 func init() {
 	signals := make(chan os.Signal)
@@ -218,6 +253,87 @@ func wgVersion() *C.char {
 		}
 	}
 	return C.CString("unknown")
+}
+
+//export wgV2rayStart
+func wgV2rayStart(jsonConfig *C.char) int32 {
+	initV2RayMemoryManagement()
+	v2rayLocker.Lock()
+	defer v2rayLocker.Unlock()
+
+	configStr := C.GoString(jsonConfig)
+
+	log.Printf("[V2Ray] Initializing core...")
+	config, err := coreserial.LoadJSONConfig(strings.NewReader(configStr))
+	if err != nil {
+		log.Printf("[V2Ray] Configuration error: %v", err)
+		return -1
+	}
+
+	coreInstance, err := core.New(config)
+	if err != nil {
+		log.Printf("[V2Ray] Core initialization failed: %v", err)
+		return -1
+	}
+
+	statsManager := coreInstance.GetFeature(corestats.ManagerType()).(corestats.Manager)
+
+	instance := &V2RayInstance{
+		coreInstance: coreInstance,
+		statsManager: statsManager,
+		IsRunning:    true,
+	}
+
+	log.Printf("[V2Ray] Starting core...")
+	if err := coreInstance.Start(); err != nil {
+		instance.IsRunning = false
+		log.Printf("[V2Ray] Startup failed: %v", err)
+		return -1
+	}
+
+	// Find available handle
+	var handle int32
+	for handle = 0; handle < math.MaxInt32; handle++ {
+		if _, exists := v2rayHandles[handle]; !exists {
+			break
+		}
+	}
+	if handle == math.MaxInt32 {
+		coreInstance.Close()
+		log.Printf("[V2Ray] No available handles")
+		return -1
+	}
+
+	v2rayHandles[handle] = instance
+	log.Printf("[V2Ray] Core started successfully with handle %d", handle)
+	debug.FreeOSMemory() // Free memory after start
+	return handle
+}
+
+//export wgV2rayStop
+func wgV2rayStop(handle int32) int32 {
+	v2rayLocker.Lock()
+	defer v2rayLocker.Unlock()
+
+	instance, ok := v2rayHandles[handle]
+	if !ok || instance == nil {
+		log.Printf("[V2Ray] No running instance for handle %d", handle)
+		return 0 // Not an error - already stopped
+	}
+
+	if !instance.IsRunning {
+		delete(v2rayHandles, handle)
+		return 0
+	}
+
+	log.Printf("[V2Ray] Stopping core for handle %d...", handle)
+	instance.coreInstance.Close()
+	instance.IsRunning = false
+	delete(v2rayHandles, handle)
+
+	log.Printf("[V2Ray] Core stopped successfully")
+	debug.FreeOSMemory() // Free memory after stop
+	return 0
 }
 
 func main() {}
