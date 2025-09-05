@@ -7,7 +7,7 @@ This project contains an application for iOS and for macOS, as well as many comp
 - Clone this repo:
 
 ```
-$ git clone https://github.com/codewithtamim/wireguard-apple.git
+$ git clone https://github.com/ivpn/wireguard-apple.git
 $ cd wireguard-apple
 ```
 
@@ -37,7 +37,7 @@ $ open WireGuard.xcodeproj
 1. Open your Xcode project and add the Swift package with the following URL:
    
    ```
-   https://github.com/codewithtamim/wireguard-apple.git
+   https://github.com/ivpn/wireguard-apple.git
    ```
    
 2. `WireGuardKit` links against `wireguard-go-bridge` library, but it cannot build it automatically
