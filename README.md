@@ -1,6 +1,6 @@
-# [WireGuard](https://www.wireguard.com/) for iOS and macOS
+# [WireGuard](https://www.wireguard.com/) for iOS and macOS - V2Ray Extension Fork
 
-This project contains an application for iOS and for macOS, as well as many components shared between the two of them. You may toggle between the two platforms by selecting the target from within Xcode.
+This project is a fork of the official WireGuard Apple implementation with V2Ray extension support, enabling WireGuard over V2Ray proxy. It contains applications for iOS and macOS, as well as many components shared between the two platforms. You may toggle between the two platforms by selecting the target from within Xcode.
 
 ## Building
 
